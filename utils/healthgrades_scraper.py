@@ -1,22 +1,21 @@
-
 import requests
 from bs4 import BeautifulSoup
 import json
-import time
-import argparse
 import os
+import time
 
 BASE_URL = "https://www.healthgrades.com"
 DIRECTORY_URL = f"{BASE_URL}/hospital-directory"
 
-def get_state_blocks():
-    response = requests.get(DIRECTORY_URL)
-    soup = BeautifulSoup(response.content, "html.parser")
-    return soup.select("div[data-qa-target='alpha-list'] ul li")
-
-def scrape(limit=None):
+def scrape_healthgrades(limit=None):
     schema = {}
     total_hospitals = 0
+
+    def get_state_blocks():
+        response = requests.get(DIRECTORY_URL)
+        soup = BeautifulSoup(response.content, "html.parser")
+        return soup.select("div[data-qa-target='alpha-list'] ul li")
+
     state_blocks = get_state_blocks()
 
     for block in state_blocks:
@@ -25,7 +24,6 @@ def scrape(limit=None):
             state_name = state_link.text.strip()
             relative_state_url = state_link.get("href")
             state_url = f"{BASE_URL}{relative_state_url}"
-            print(f"[INFO] Processing state: {state_name}")
             schema[state_name] = {}
 
             try:
@@ -39,8 +37,6 @@ def scrape(limit=None):
                         city_name = city_link.text.strip()
                         relative_city_url = city_link.get("href")
                         city_url = f"{BASE_URL}/hospital-directory/{relative_city_url}"
-                        print(f"  [INFO] Processing city: {city_name}")
-
                         schema[state_name][city_name] = {}
 
                         try:
@@ -68,13 +64,6 @@ def scrape(limit=None):
                                 except Exception:
                                     rating = None
 
-                                print("    [HOSPITAL FOUND]")
-                                print(f"      State  : {state_name}")
-                                print(f"      City   : {city_name}")
-                                print(f"      Name   : {hospital_name}")
-                                print(f"      Rating : {rating}")
-                                print(f"      URL    : {hospital_url}")
-
                                 schema[state_name][city_name][hospital_name] = {
                                     "name": hospital_name,
                                     "rating": rating
@@ -83,35 +72,19 @@ def scrape(limit=None):
                                 total_hospitals += 1
                                 time.sleep(0.5)
 
-                        except Exception as e:
-                            print(f"    [ERROR] Failed to process city '{city_name}': {e}")
+                        except Exception:
+                            continue
                         time.sleep(1)
 
-            except Exception as e:
-                print(f"  [ERROR] Failed to process state '{state_name}': {e}")
+            except Exception:
+                continue
         time.sleep(1)
 
     return schema
 
-def main():
-    parser = argparse.ArgumentParser(description="Scrape Healthgrades hospital data.")
-    parser.add_argument("--scrape", type=int, help="Scrape and print only first N hospital entries.")
-    parser.add_argument("--save", type=str, help="Save full dataset to the given path.")
-    args = parser.parse_args()
-
-    if args.scrape:
-        data = scrape(limit=args.scrape)
-        print(json.dumps(data, indent=2))
-
-    elif args.save:
-        data = scrape()
-        os.makedirs(os.path.dirname(args.save), exist_ok=True)
-        with open(args.save, "w") as f:
-            json.dump(data, f, indent=2)
-        print(f"[INFO] Dataset saved to {args.save}")
-    else:
-        data = scrape()
-        print(json.dumps(data, indent=2))
-
-if __name__ == "__main__":
-    main()
+def save_scraped_healthgrades(output_path="data/raw/healthgrades_data.json", limit=None):
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    data = scrape_healthgrades(limit=limit)
+    with open(output_path, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"[SUCCESS] Scraped data saved to {output_path}")
